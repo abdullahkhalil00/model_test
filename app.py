@@ -4,7 +4,7 @@ import torch
 
 st.title("AI Resume Builder MVP")
 
-model_name = "Qwen/Qwen2.5-1.5B-Instruct"
+model_name = "Qwen/Qwen2.5-0.5B-Instruct"
 
 @st.cache_resource
 def load_model():
