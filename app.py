@@ -1,46 +1,131 @@
 import streamlit as st
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
+from huggingface_hub import InferenceClient
 
-st.title("AI Resume Builder MVP")
+HF_TOKEN = st.secrets["HF_TOKEN"]
 
-model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+generator = InferenceClient(
+    provider="hf-inference",
+    api_key=HF_TOKEN
+)
 
-@st.cache_resource
-def load_model():
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        device_map="auto",
-        torch_dtype="auto"
-    )
-    return tokenizer, model
+critic = InferenceClient(
+    provider="hf-inference",
+    api_key=HF_TOKEN
+)
 
-tokenizer, model = load_model()
+refiner = InferenceClient(
+    provider="hf-inference",
+    api_key=HF_TOKEN
+)
 
-user_input = st.text_area("Enter your prompt", "Write a resume summary for frontend developer")
 
-if st.button("Generate"):
-    messages = [
-        {"role": "user", "content": user_input}
-    ]
+GENERATOR_MODEL = "Qwen/Qwen2.5-3B-Instruct"
+CRITIC_MODEL = "microsoft/Phi-4-mini-instruct"
+REFINER_MODEL = "google/gemma-3-4b-it"
 
-    text = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
-    )
 
-    inputs = tokenizer([text], return_tensors="pt").to(model.device)
-
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=200
+def call_model(model, prompt):
+    response = generator.chat.completions.create(
+        model=model,
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        max_tokens=700
     )
 
-    result = tokenizer.decode(
-        outputs[0][inputs["input_ids"].shape[-1]:],
-        skip_special_tokens=True
+    return response.choices[0].message.content
+
+
+def generate_answer(user_question):
+
+    generator_prompt = f"""
+Answer the user's question clearly and accurately.
+
+Question:
+{user_question}
+"""
+
+    draft_answer = call_model(
+        GENERATOR_MODEL,
+        generator_prompt
     )
 
-    st.write(result)
+    critic_prompt = f"""
+You are an expert reviewer.
+
+Question:
+{user_question}
+
+Draft Answer:
+{draft_answer}
+
+Tasks:
+1. Find factual mistakes.
+2. Find missing information.
+3. Find unclear explanations.
+4. Suggest improvements.
+
+Return a detailed review.
+"""
+
+    review = call_model(
+        CRITIC_MODEL,
+        critic_prompt
+    )
+
+    refiner_prompt = f"""
+You are an expert editor.
+
+User Question:
+{user_question}
+
+Original Draft:
+{draft_answer}
+
+Reviewer Feedback:
+{review}
+
+Create the best final answer.
+
+Requirements:
+- Correct mistakes.
+- Add missing information.
+- Improve clarity.
+- Keep the answer concise.
+"""
+
+    final_answer = call_model(
+        REFINER_MODEL,
+        refiner_prompt
+    )
+
+    return {
+        "draft": draft_answer,
+        "review": review,
+        "final": final_answer
+    }
+
+
+st.title("Multi-Agent AI Assistant")
+
+question = st.text_area(
+    "Ask anything"
+)
+
+if st.button("Generate") and question:
+
+    with st.spinner("Thinking..."):
+
+        result = generate_answer(question)
+
+        st.subheader("Final Answer")
+        st.write(result["final"])
+
+        with st.expander("Draft Answer"):
+            st.write(result["draft"])
+
+        with st.expander("Critic Review"):
+            st.write(result["review"])
