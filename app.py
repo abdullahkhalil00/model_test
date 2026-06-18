@@ -1,46 +1,53 @@
 import streamlit as st
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
+from huggingface_hub import InferenceClient
 
-st.title("AI Resume Builder MVP")
+generator = InferenceClient(
+    provider="hf-inference",
+    api_key=st.secrets["HF_TOKEN"]
+)
 
-model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+critic = InferenceClient(
+    provider="hf-inference",
+    api_key=st.secrets["HF_TOKEN"]
+)
 
-@st.cache_resource
-def load_model():
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        device_map="auto",
-        torch_dtype="auto"
+refiner = InferenceClient(
+    provider="hf-inference",
+    api_key=st.secrets["HF_TOKEN"]
+)
+
+
+GEN_MODEL = "Qwen/Qwen2.5-3B-Instruct"
+CRITIC_MODEL = "microsoft/Phi-4-mini-instruct"
+REFINER_MODEL = "google/gemma-3-4b-it"
+
+
+def call(model, prompt):
+    res = generator.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=500
     )
-    return tokenizer, model
+    return res.choices[0].message.content
 
-tokenizer, model = load_model()
 
-user_input = st.text_area("Enter your prompt", "Write a resume summary for frontend developer")
+st.title("Multi Model AI")
 
-if st.button("Generate"):
-    messages = [
-        {"role": "user", "content": user_input}
-    ]
+user_input = st.text_area("Enter prompt")
 
-    text = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
-    )
+if st.button("Run"):
 
-    inputs = tokenizer([text], return_tensors="pt").to(model.device)
+    draft = call(GEN_MODEL, user_input)
 
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=200
-    )
+    review = call(CRITIC_MODEL, f"Review this:\n{draft}")
 
-    result = tokenizer.decode(
-        outputs[0][inputs["input_ids"].shape[-1]:],
-        skip_special_tokens=True
-    )
+    final = call(REFINER_MODEL, f"""
+Improve this answer:
 
-    st.write(result)
+{draft}
+
+Feedback:
+{review}
+""")
+
+    st.write(final)
