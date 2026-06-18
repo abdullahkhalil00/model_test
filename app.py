@@ -1,6 +1,8 @@
 import streamlit as st
 from huggingface_hub import InferenceClient
 
+st.title("Multi Model AI")
+
 client = InferenceClient(api_key=st.secrets["HF_TOKEN"])
 
 GEN_MODEL = "Qwen/Qwen2.5-3B-Instruct"
@@ -9,31 +11,51 @@ REFINER_MODEL = "Qwen/Qwen2.5-3B-Instruct"
 
 
 def call(model, prompt):
-    res = client.chat.completions.create(
+    return client.text_generation(
         model=model,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=500
+        prompt=prompt,
+        max_new_tokens=400,
+        temperature=0.7
     )
-    return res.choices[0].message.content
 
 
-st.title("Multi Model AI")
-
-user_input = st.text_area("Enter prompt")
-
-if st.button("Run"):
+def run_pipeline(user_input):
 
     draft = call(GEN_MODEL, user_input)
 
-    review = call(CRITIC_MODEL, "Review and fix this:\n" + draft)
-
-    final = call(REFINER_MODEL, f"""
-Improve this answer:
-
+    review = call(CRITIC_MODEL, f"""
+Review this answer:
 {draft}
 
-Review:
-{review}
+Find mistakes and improvements.
 """)
 
+    final = call(REFINER_MODEL, f"""
+Improve this answer using feedback.
+
+Answer:
+{draft}
+
+Feedback:
+{review}
+
+Return final clean answer.
+""")
+
+    return draft, review, final
+
+
+user_input = st.text_area("Enter prompt")
+
+if st.button("Run") and user_input:
+
+    draft, review, final = run_pipeline(user_input)
+
+    st.subheader("Final Answer")
     st.write(final)
+
+    with st.expander("Draft"):
+        st.write(draft)
+
+    with st.expander("Review"):
+        st.write(review)
