@@ -11,13 +11,18 @@ REFINER_MODEL = "Qwen/Qwen2.5-3B-Instruct"
 
 
 def call(model, prompt):
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=400,
-        temperature=0.7,
-    )
-    return response.choices[0].message.content
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=400,
+            temperature=0.7,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        # Surface the real provider error instead of letting Streamlit redact it
+        st.error(f"Call to {model} failed:\n\n{e}")
+        st.stop()
 
 
 def run_pipeline(user_input):
