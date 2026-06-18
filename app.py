@@ -11,34 +11,30 @@ REFINER_MODEL = "Qwen/Qwen2.5-3B-Instruct"
 
 
 def call(model, prompt):
-    return client.text_generation(
+    response = client.chat.completions.create(
         model=model,
-        prompt=prompt,
-        max_new_tokens=400,
-        temperature=0.7
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=400,
+        temperature=0.7,
     )
+    return response.choices[0].message.content
 
 
 def run_pipeline(user_input):
-
     draft = call(GEN_MODEL, user_input)
 
     review = call(CRITIC_MODEL, f"""
 Review this answer:
 {draft}
-
 Find mistakes and improvements.
 """)
 
     final = call(REFINER_MODEL, f"""
 Improve this answer using feedback.
-
 Answer:
 {draft}
-
 Feedback:
 {review}
-
 Return final clean answer.
 """)
 
@@ -48,7 +44,6 @@ Return final clean answer.
 user_input = st.text_area("Enter prompt")
 
 if st.button("Run") and user_input:
-
     draft, review, final = run_pipeline(user_input)
 
     st.subheader("Final Answer")
