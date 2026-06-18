@@ -1,5 +1,3 @@
+huggingface_hub
+requests
 streamlit
-transformers
-torch
-accelerate
-safetensors
