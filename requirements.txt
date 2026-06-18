@@ -1,5 +1,2 @@
-streamlit
-transformers
-torch
-accelerate
-safetensors
+streamlit>=1.30.0
+huggingface_hub>=0.20.0
