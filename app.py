@@ -1,13 +1,18 @@
 import streamlit as st
-from huggingface_hub import InferenceClient
+from huggingface_hub import InferenceClient, model_info
 
 st.title("Multi Model AI updated")
 
+# --- one-time debug helper: uncomment to see which models your account can actually use ---
+# for m in ["Qwen/Qwen2.5-3B-Instruct", "Qwen/Qwen2.5-7B-Instruct", "Qwen/Qwen2.5-7B-Instruct-1M", "Qwen/Qwen2.5-1.5B-Instruct"]:
+#     info = model_info(m, expand="inferenceProviderMapping")
+#     st.write(m, "->", info.inference_provider_mapping)
+
 client = InferenceClient(api_key=st.secrets["HF_TOKEN"])
 
-GEN_MODEL = "Qwen/Qwen2.5-3B-Instruct"
-CRITIC_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
-REFINER_MODEL = "Qwen/Qwen2.5-3B-Instruct"
+GEN_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+CRITIC_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+REFINER_MODEL = "Qwen/Qwen2.5-7B-Instruct"
 
 
 def call(model, prompt):
