@@ -1,66 +1,58 @@
-import streamlit as st
-from huggingface_hub import InferenceClient, model_info
+from fastapi import FastAPI
+from pydantic import BaseModel
+from huggingface_hub import InferenceClient
+import os
 
-st.title("Multi Model AI updated")
+app = FastAPI()
 
-# --- one-time debug helper: uncomment to see which models your account can actually use ---
-# for m in ["Qwen/Qwen2.5-3B-Instruct", "Qwen/Qwen2.5-7B-Instruct", "Qwen/Qwen2.5-7B-Instruct-1M", "Qwen/Qwen2.5-1.5B-Instruct"]:
-#     info = model_info(m, expand="inferenceProviderMapping")
-#     st.write(m, "->", info.inference_provider_mapping)
+client = InferenceClient(api_key=os.getenv("HF_TOKEN"))
 
-client = InferenceClient(api_key=st.secrets["HF_TOKEN"])
-
-GEN_MODEL = "Qwen/Qwen2.5-7B-Instruct"
-CRITIC_MODEL = "Qwen/Qwen2.5-7B-Instruct"
-REFINER_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+MODEL = "Qwen/Qwen2.5-3B-Instruct"
 
 
-def call(model, prompt):
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=400,
-            temperature=0.7,
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        # Surface the real provider error instead of letting Streamlit redact it
-        st.error(f"Call to {model} failed:\n\n{e}")
-        st.stop()
+class Request(BaseModel):
+    jobTitle: str
+    company: str
+    jobDescription: str
 
 
-def run_pipeline(user_input):
-    draft = call(GEN_MODEL, user_input)
+def build_prompt(jobTitle, company, jobDescription):
+    return f"""
+You are a resume expert.
 
-    review = call(CRITIC_MODEL, f"""
-Review this answer:
-{draft}
-Find mistakes and improvements.
-""")
+Return ONLY valid JSON.
 
-    final = call(REFINER_MODEL, f"""
-Improve this answer using feedback.
-Answer:
-{draft}
-Feedback:
-{review}
-Return final clean answer.
-""")
+Job Title: {jobTitle}
+Company: {company}
 
-    return draft, review, final
+Job Description:
+{jobDescription}
+
+Rules:
+- Use only given information
+- Do not add fake experience
+- Make ATS friendly resume
+- Keep output strict JSON format
+"""
 
 
-user_input = st.text_area("Enter prompt")
+def generate(prompt):
+    response = client.text_generation(
+        model=MODEL,
+        prompt=prompt,
+        max_new_tokens=900,
+        temperature=0.3
+    )
+    return response
 
-if st.button("Run") and user_input:
-    draft, review, final = run_pipeline(user_input)
 
-    st.subheader("Final Answer")
-    st.write(final)
+@app.post("/generate")
+def generate_resume(req: Request):
 
-    with st.expander("Draft"):
-        st.write(draft)
+    prompt = build_prompt(req.jobTitle, req.company, req.jobDescription)
 
-    with st.expander("Review"):
-        st.write(review)
+    result = generate(prompt)
+
+    return {
+        "resume": result
+    }
